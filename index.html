@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>STT + TTS + Recorder</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0; padding: 0;
+      background: #f9f9f9;
+      display: flex; flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    h1 { color: #333; }
+    .section {
+      background: white;
+      padding: 15px;
+      margin: 15px 0;
+      border-radius: 10px;
+      width: 100%;
+      max-width: 500px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    textarea, select {
+      width: 100%; padding: 10px; margin: 10px 0;
+      border-radius: 5px; border: 1px solid #ccc;
+      font-size: 14px;
+    }
+    button {
+      padding: 10px 15px;
+      margin: 5px;
+      border: none;
+      border-radius: 5px;
+      background: #007BFF;
+      color: white; cursor: pointer;
+      font-size: 14px;
+    }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    audio { margin-top: 10px; width: 100%; }
+  </style>
+</head>
+<body>
+
+<h1>Speech Tools</h1>
+
+<div class="section">
+  <h2>Speech-to-Text</h2>
+  <textarea id="sttResult" rows="4" placeholder="Your speech will appear here..."></textarea><br>
+  <button id="startSTT">Start STT</button>
+  <button id="stopSTT">Stop STT</button>
+</div>
+
+<div class="section">
+  <h2>Text-to-Speech</h2>
+  <textarea id="ttsInput" rows="3" placeholder="Enter text to speak..."></textarea>
+  <select id="voiceSelect"></select><br>
+  <button id="speakTTS">Speak</button>
+  <button id="downloadTTS">Download Speech</button>
+  <audio id="ttsAudio" controls></audio>
+</div>
+
+<div class="section">
+  <h2>Audio Recorder</h2>
+  <button id="startRec">Start Recording</button>
+  <button id="stopRec" disabled>Stop & Download</button>
+  <audio id="recPlayer" controls></audio>
+</div>
+
+<script>
+  // ========== SPEECH TO TEXT ==========
+  let recognition;
+  let sttResult = document.getElementById('sttResult');
+  let finalText = "";
+
+  if ('webkitSpeechRecognition' in window) {
+    recognition = new webkitSpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = function(event) {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        let transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalText += transcript.trim() + ". ";
+        } else {
+          interim += transcript;
+        }
+      }
+      sttResult.value = finalText + interim;
+    };
+  } else {
+    alert("Speech Recognition not supported in this browser.");
+  }
+
+  document.getElementById("startSTT").onclick = () => { finalText = sttResult.value + " "; recognition.start(); };
+  document.getElementById("stopSTT").onclick = () => recognition.stop();
+
+  // ========== TEXT TO SPEECH ==========
+  const voiceSelect = document.getElementById('voiceSelect');
+  let voices = [];
+
+  function loadVoices() {
+    voices = speechSynthesis.getVoices();
+    voiceSelect.innerHTML = '';
+    voices.forEach((v, i) => {
+      let option = document.createElement('option');
+      option.value = i;
+      option.textContent = v.name + ' (' + v.lang + ')';
+      voiceSelect.appendChild(option);
+    });
+  }
+  loadVoices();
+  speechSynthesis.onvoiceschanged = loadVoices;
+
+  document.getElementById("speakTTS").onclick = () => {
+    let text = document.getElementById("ttsInput").value;
+    let utter = new SpeechSynthesisUtterance(text);
+    if (voices.length > 0) utter.voice = voices[voiceSelect.value];
+    speechSynthesis.speak(utter);
+    utter.onend = () => console.log("Speech done");
+  };
+
+  document.getElementById("downloadTTS").onclick = () => {
+    let text = document.getElementById("ttsInput").value;
+    let blob = new Blob([text], {type: "text/plain"});
+    let a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "tts_text.txt"; 
+    a.click();
+  };
+
+  // ========== SIMPLE AUDIO RECORDER ==========
+  let mediaRecorder;
+  let audioChunks = [];
+  let recPlayer = document.getElementById("recPlayer");
+
+  document.getElementById("startRec").onclick = async () => {
+    let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = () => {
+      let blob = new Blob(audioChunks, { type: 'audio/webm' });
+      recPlayer.src = URL.createObjectURL(blob);
+
+      // auto-download
+      let a = document.createElement("a");
+      a.href = recPlayer.src;
+      a.download = "recording.webm";
+      a.click();
+    };
+
+    mediaRecorder.start();
+    document.getElementById("startRec").disabled = true;
+    document.getElementById("stopRec").disabled = false;
+  };
+
+  document.getElementById("stopRec").onclick = () => {
+    mediaRecorder.stop();
+    document.getElementById("startRec").disabled = false;
+    document.getElementById("stopRec").disabled = true;
+  };
+</script>
+</body>
+</html>
